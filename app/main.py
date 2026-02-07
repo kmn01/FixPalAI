@@ -125,64 +125,68 @@ with st.sidebar:
                     st.warning("No content extracted from files.")
 
 # ---- Main: Chat ----
-vs = ensure_vector_store()
-if vs is None and st.session_state.get("vector_store_error"):
-    st.error(f"Vector store error: {st.session_state['vector_store_error']}")
-    st.info("Set OPENAI_API_KEY in .env. For Chroma, ensure chromadb is installed.")
-else:
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# Vector store is created on first use (ingest or first message) to keep startup fast.
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    for i, msg in enumerate(st.session_state.messages):
-        with st.chat_message(msg["role"]):
-            if msg.get("image"):
-                st.image(msg["image"], use_container_width=True)
-            st.markdown(msg["content"])
-            if msg["role"] == "assistant" and msg.get("content"):
-                col1, _ = st.columns([1, 4])
-                with col1:
-                    if st.button("🔊 Read aloud", key=f"tts_{i}"):
-                        audio_bytes = text_to_speech(msg["content"])
-                        if audio_bytes is not None:
-                            st.session_state[f"tts_audio_{i}"] = audio_bytes
-                        else:
-                            st.session_state[f"tts_error_{i}"] = True
-                if f"tts_audio_{i}" in st.session_state:
-                    b64 = base64.b64encode(st.session_state[f"tts_audio_{i}"]).decode("utf-8")
-                    st.markdown(
-                        f'<audio src="data:audio/mp3;base64,{b64}" autoplay controls playsinline></audio>',
-                        unsafe_allow_html=True,
-                    )
-                elif st.session_state.get(f"tts_error_{i}"):
-                    st.caption("Could not generate audio for this message.")
+for i, msg in enumerate(st.session_state.messages):
+    with st.chat_message(msg["role"]):
+        if msg.get("image"):
+            st.image(msg["image"], use_container_width=True)
+        st.markdown(msg["content"])
+        if msg["role"] == "assistant" and msg.get("content"):
+            col1, _ = st.columns([1, 4])
+            with col1:
+                if st.button("🔊 Read aloud", key=f"tts_{i}"):
+                    audio_bytes = text_to_speech(msg["content"])
+                    if audio_bytes is not None:
+                        st.session_state[f"tts_audio_{i}"] = audio_bytes
+                    else:
+                        st.session_state[f"tts_error_{i}"] = True
+            if f"tts_audio_{i}" in st.session_state:
+                b64 = base64.b64encode(st.session_state[f"tts_audio_{i}"]).decode("utf-8")
+                st.markdown(
+                    f'<audio src="data:audio/mp3;base64,{b64}" autoplay controls playsinline></audio>',
+                    unsafe_allow_html=True,
+                )
+            elif st.session_state.get(f"tts_error_{i}"):
+                st.caption("Could not generate audio for this message.")
 
-    # Text and voice input at the bottom: chat input first, then mic below it
-    prompt = st.session_state.pop("pending_voice_query", None)
-    if prompt is None:
-        prompt = st.chat_input("Enter your question or describe the problem you're facing...")
+# Text and voice input at the bottom: chat input first, then mic below it
+prompt = st.session_state.pop("pending_voice_query", None)
+if prompt is None:
+    prompt = st.chat_input("Enter your question or describe the problem you're facing...")
 
-    st.caption("Or use the microphone to speak your question")
-    audio_value = st.audio_input(
-        "🎤 Speak",
-        key="voice_input",
-        help="Click to record, then stop when done. Your speech will be transcribed and sent.",
-    )
-    if audio_value is not None:
-        audio_bytes = audio_value.read()
-        if audio_bytes:
-            # Avoid reprocessing the same recording (e.g. after rerun)
-            audio_hash = hashlib.sha256(audio_bytes).hexdigest()
-            if st.session_state.get("last_voice_audio_hash") != audio_hash:
-                st.session_state["last_voice_audio_hash"] = audio_hash
-                with st.spinner("Transcribing..."):
-                    text = speech_to_text(audio_bytes)
-                if text:
-                    st.session_state["pending_voice_query"] = text
-                    st.rerun()
-                else:
-                    st.error("Could not transcribe audio. Please try again or type your question.")
+st.caption("Or use the microphone to speak your question")
+audio_value = st.audio_input(
+    "🎤 Speak",
+    key="voice_input",
+    help="Click to record, then stop when done. Your speech will be transcribed and sent.",
+)
+if audio_value is not None:
+    audio_bytes = audio_value.read()
+    if audio_bytes:
+        # Avoid reprocessing the same recording (e.g. after rerun)
+        audio_hash = hashlib.sha256(audio_bytes).hexdigest()
+        if st.session_state.get("last_voice_audio_hash") != audio_hash:
+            st.session_state["last_voice_audio_hash"] = audio_hash
+            with st.spinner("Transcribing..."):
+                text = speech_to_text(audio_bytes)
+            if text:
+                st.session_state["pending_voice_query"] = text
+                st.rerun()
+            else:
+                st.error("Could not transcribe audio. Please try again or type your question.")
 
-    if prompt:
+if prompt:
+    vs = ensure_vector_store()
+    if vs is None:
+        err = st.session_state.get("vector_store_error", "Could not connect to vector store.")
+        st.error(err)
+        st.info("Set OPENAI_API_KEY in .env. For Chroma, ensure chromadb is installed.")
+        st.session_state.messages.append({"role": "user", "content": prompt, "image": None})
+        st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}"})
+    else:
         st.session_state.messages.append({
             "role": "user",
             "content": prompt,
@@ -228,5 +232,5 @@ else:
                     st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}"})
                     log_interaction(prompt=prompt, response=f"Error: {err}", domain="error", image_provided=False)
 
-    if not st.session_state.messages:
-        st.info("👆 Ingest documents and images in the sidebar first, then ask questions.")
+if not st.session_state.messages:
+    st.info("👆 Ingest documents and images in the sidebar first, then ask questions.")

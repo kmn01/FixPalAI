@@ -44,10 +44,10 @@ def rag_query(
     ])
     
     # Generate answer using LLM
-    system_prompt = """You are a helpful home repair assistant. 
+    system_prompt = """You are a helpful home repair assistant. The user is a technician who is on ground, fixing home repair problems such as plumbing, electrical, carpentry, hvac, etc.
 Use the provided context from manuals and guides to answer the user's question accurately.
 If the context doesn't contain enough information, say so and provide general guidance.
-Always cite your sources when possible."""
+Always cite your sources when possible. Keep the answer concise and to the point."""
 
     user_prompt = f"""Context from knowledge base: {context}\n\nUser Question: {query}
     Please provide a helpful answer based on the context above."""
