@@ -2,6 +2,8 @@
 
 import sys
 from pathlib import Path
+import tempfile
+import uuid
 
 # Ensure project root is on path when running via streamlit run
 _project_root = Path(__file__).resolve().parent.parent
@@ -95,7 +97,10 @@ with st.sidebar:
                 for f in uploaded:
                     ext = Path(f.name).suffix.lower()
                     data = f.read()
-                    path = Path("/tmp") / f.name
+
+                    tmp_dir = Path(tempfile.gettempdir())
+                    safe_name = f"{uuid.uuid4().hex}_{f.name}"
+                    path = tmp_dir / safe_name
                     path.write_bytes(data)
                     if ext == ".pdf":
                         docs = list(load_document(path, source_type="user"))
