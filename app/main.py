@@ -11,7 +11,6 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 import base64
-import hashlib
 import io
 
 import streamlit as st
@@ -31,21 +30,6 @@ st.set_page_config(page_title="FixPalAI", page_icon="🔧", layout="wide")
 
 st.title("🔧 FixPalAI")
 st.caption("Home repair diagnosis via RAG — ingest documents and images in the sidebar, then ask questions.")
-
-
-def speech_to_text(audio_bytes: bytes) -> str | None:
-    """Transcribe audio (WAV) to text using OpenAI Whisper. Returns None on failure."""
-    if not audio_bytes:
-        return None
-    try:
-        from openai import OpenAI
-        client = OpenAI()
-        audio_file = io.BytesIO(audio_bytes)
-        audio_file.name = "audio.wav"
-        response = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
-        return (response.text or "").strip() or None
-    except Exception:
-        return None
 
 
 def text_to_speech(text: str, max_chars: int = 4000) -> bytes | None:
@@ -133,6 +117,8 @@ for i, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
         if msg.get("image"):
             st.image(msg["image"], use_container_width=True)
+        if msg["role"] == "assistant" and msg.get("domain") and msg["domain"] != "error":
+            st.caption(f"Routed to: **{msg['domain'].title()}** specialist")
         st.markdown(msg["content"])
         if msg["role"] == "assistant" and msg.get("content"):
             col1, _ = st.columns([1, 4])
@@ -152,31 +138,7 @@ for i, msg in enumerate(st.session_state.messages):
             elif st.session_state.get(f"tts_error_{i}"):
                 st.caption("Could not generate audio for this message.")
 
-# Text and voice input at the bottom: chat input first, then mic below it
-prompt = st.session_state.pop("pending_voice_query", None)
-if prompt is None:
-    prompt = st.chat_input("Enter your question or describe the problem you're facing...")
-
-st.caption("Or use the microphone to speak your question")
-audio_value = st.audio_input(
-    "🎤 Speak",
-    key="voice_input",
-    help="Click to record, then stop when done. Your speech will be transcribed and sent.",
-)
-if audio_value is not None:
-    audio_bytes = audio_value.read()
-    if audio_bytes:
-        # Avoid reprocessing the same recording (e.g. after rerun)
-        audio_hash = hashlib.sha256(audio_bytes).hexdigest()
-        if st.session_state.get("last_voice_audio_hash") != audio_hash:
-            st.session_state["last_voice_audio_hash"] = audio_hash
-            with st.spinner("Transcribing..."):
-                text = speech_to_text(audio_bytes)
-            if text:
-                st.session_state["pending_voice_query"] = text
-                st.rerun()
-            else:
-                st.error("Could not transcribe audio. Please try again or type your question.")
+prompt = st.chat_input("Enter your question or describe the problem you're facing...")
 
 if prompt:
     vs = ensure_vector_store()
@@ -185,7 +147,7 @@ if prompt:
         st.error(err)
         st.info("Set OPENAI_API_KEY in .env. For Chroma, ensure chromadb is installed.")
         st.session_state.messages.append({"role": "user", "content": prompt, "image": None})
-        st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}"})
+        st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}", "domain": "error"})
     else:
         st.session_state.messages.append({
             "role": "user",
@@ -204,7 +166,7 @@ if prompt:
                     )
                     st.caption(f"Routed to: **{domain.title()}** specialist")
                     st.markdown(answer)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                    st.session_state.messages.append({"role": "assistant", "content": answer, "domain": domain})
                     idx = len(st.session_state.messages) - 1
                     if st.button("🔊 Read aloud", key=f"tts_{idx}"):
                         audio_bytes = text_to_speech(answer)
@@ -229,7 +191,7 @@ if prompt:
                 except Exception as e:
                     err = str(e)
                     st.error(err)
-                    st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}"})
+                    st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}", "domain": "error"})
                     log_interaction(prompt=prompt, response=f"Error: {err}", domain="error", image_provided=False)
 
 if not st.session_state.messages:

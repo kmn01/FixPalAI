@@ -37,5 +37,4 @@ def analyze_image(image_bytes: bytes, user_query: str = "") -> str:
     # Get vision model and analyze
     llm = get_vision_llm()
     response = llm.invoke([message])
-    
-    return response.content
+    return getattr(response, "content", None) or str(response)

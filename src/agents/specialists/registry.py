@@ -8,6 +8,9 @@ from src.services.vector_store import search_multiple_namespaces
 from src.agents.safety_validation import validate_safety
 
 
+# Ordered list of domains for routing (used by router.py)
+DOMAINS = ("plumbing", "electrical", "carpentry", "hvac", "general")
+
 # Domain-specific system prompts
 SPECIALIST_PROMPTS = {
     "plumbing": """You are an expert plumbing specialist. Provide detailed, safe, and practical advice for plumbing repairs.
