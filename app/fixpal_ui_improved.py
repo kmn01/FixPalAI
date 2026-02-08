@@ -72,6 +72,95 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def get_all_sources(vs) -> list[dict]:
+    """Get unique sources from the vector store with chunk counts."""
+    try:
+        collection = vs._collection
+        results = collection.get(include=["metadatas"])
+        source_map: dict[str, dict] = {}
+        for meta in (results.get("metadatas") or []):
+            if not meta or "source" not in meta:
+                continue
+            src = meta["source"]
+            if src not in source_map:
+                source_map[src] = {
+                    "name": src,
+                    "type": meta.get("source_type", "unknown"),
+                    "domain": meta.get("domain", ""),
+                    "chunks": 0,
+                }
+            source_map[src]["chunks"] += 1
+        return sorted(source_map.values(), key=lambda x: x["name"])
+    except Exception:
+        return []
+
+
+def delete_source(vs, source_name: str) -> int:
+    """Delete all chunks belonging to a source. Returns count deleted."""
+    try:
+        collection = vs._collection
+        results = collection.get(where={"source": source_name}, include=[])
+        ids = results.get("ids", [])
+        if ids:
+            collection.delete(ids=ids)
+        return len(ids)
+    except Exception as e:
+        st.error(f"Failed to remove source: {e}")
+        return 0
+
+
+@st.dialog("📚 Manage Knowledge Sources", width="large")
+def manage_sources_dialog():
+    vs = st.session_state.get("vector_store")
+    if vs is None:
+        st.warning("⚠️ No knowledge base connected. Upload and ingest documents first.")
+        return
+
+    sources = get_all_sources(vs)
+    if not sources:
+        st.info("📭 No sources ingested yet. Use the Upload Materials section to add repair manuals.")
+        return
+
+    count = len(sources)
+    st.markdown(
+        f"<p style='color:#6B7280;font-size:0.9rem;margin-bottom:0.5rem'>"
+        f"{count} source{'s' if count != 1 else ''} in knowledge base</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    for src in sources:
+        name = src["name"]
+        chunks = src["chunks"]
+        domain = src["domain"]
+        src_type = src["type"]
+
+        ext = Path(name).suffix.lower()
+        if ext == ".pdf":
+            icon = "📄"
+        elif ext in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+            icon = "🖼️"
+        elif ext in (".txt", ".text"):
+            icon = "📝"
+        else:
+            icon = "📎"
+
+        col_info, col_btn = st.columns([5, 1])
+        with col_info:
+            domain_tag = f" &nbsp;`{domain}`" if domain else ""
+            st.markdown(
+                f"<div style='padding:0.1rem 0'>{icon} <strong>{name}</strong>{domain_tag}</div>",
+                unsafe_allow_html=True,
+            )
+            st.caption(f"{src_type} · {chunks} chunk{'s' if chunks != 1 else ''}")
+        with col_btn:
+            if st.button("Remove", key=f"remove_{name}", use_container_width=True):
+                removed = delete_source(vs, name)
+                if removed > 0:
+                    st.toast(f"Removed '{name}' ({removed} chunks)", icon="✅")
+                    st.rerun()
+
+
 def text_to_speech(text: str, max_chars: int = 4000) -> bytes | None:
     if not (text or text.strip()):
         return None
@@ -125,7 +214,7 @@ with st.sidebar:
     else:
         st.caption("Upload & ingest below to connect")
     if st.button("⚙️ Manage Sources", use_container_width=True):
-        st.info("Use the upload area below to add repair manuals and images.")
+        manage_sources_dialog()
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
