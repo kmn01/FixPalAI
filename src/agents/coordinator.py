@@ -3,7 +3,7 @@
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.vectorstores import VectorStore
 
-from src.services.llm_utils import get_llm
+from src.services.llm_utils import invoke_llm
 from src.agents.specialists.registry import get_specialist_response
 
 
@@ -52,15 +52,12 @@ Analyze the query and classify it into ONE of these domains:
 
 Respond with ONLY the domain name, nothing else."""
 
-    llm = get_llm(temperature=0.1)  # Low temp for classification
-    
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=query)
     ]
-    
-    response = llm.invoke(messages)
-    domain = response.content.strip().lower()
+    response_text = invoke_llm(messages, temperature=0.1)  # Low temp for classification
+    domain = response_text.strip().lower()
     
     # Validate domain
     valid_domains = ["plumbing", "electrical", "carpentry", "hvac", "general"]

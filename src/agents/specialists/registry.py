@@ -3,7 +3,7 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.vectorstores import VectorStore
 
-from src.services.llm_utils import get_llm
+from src.services.llm_utils import invoke_llm
 from src.services.vector_store import search_multiple_namespaces
 from src.agents.safety_validation import validate_safety
 
@@ -96,16 +96,12 @@ Provide your response in this format:
 
 Be concise but thorough. Prioritize safety above all else."""
     
-    # Get LLM and generate response
-    llm = get_llm(temperature=0.7)
-    
+    # Get LLM and generate response (Dedalus if USE_DEDALUS set, else Gemini)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=full_context)
     ]
-    
-    response = llm.invoke(messages)
-    answer = response.content
+    answer = invoke_llm(messages, temperature=0.7)
     
     # Safety validation
     safety_check = validate_safety(user_query, answer, domain)

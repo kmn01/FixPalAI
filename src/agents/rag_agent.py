@@ -3,7 +3,7 @@
 from langchain_core.vectorstores import VectorStore
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from src.services.llm_utils import get_llm
+from src.services.llm_utils import invoke_llm
 from src.services.vector_store import search_multiple_namespaces
 
 
@@ -52,12 +52,8 @@ Always cite your sources when possible. Keep the answer concise and to the point
     user_prompt = f"""Context from knowledge base: {context}\n\nUser Question: {query}
     Please provide a helpful answer based on the context above."""
     
-    llm = get_llm(temperature=0.7)
-    
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt)
     ]
-    
-    response = llm.invoke(messages)
-    return response.content
+    return invoke_llm(messages, temperature=0.7)

@@ -19,7 +19,7 @@ def get_embeddings_model() -> Embeddings:
 
     # Explicit HuggingFace / sentence-transformers (loads local model, slower startup)
     if env in ("huggingface", "sentence-transformers", "hf"):
-        from langchain_community.embeddings import HuggingFaceEmbeddings
+        from langchain_huggingface import HuggingFaceEmbeddings
         return HuggingFaceEmbeddings(
             model_name=os.getenv("HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
         )
@@ -29,8 +29,8 @@ def get_embeddings_model() -> Embeddings:
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
         return GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 
-    # Fallback: HuggingFace
-    from langchain_community.embeddings import HuggingFaceEmbeddings
+    # Fallback: HuggingFace (set HF_TOKEN in .env for higher rate limits and faster downloads)
+    from langchain_huggingface import HuggingFaceEmbeddings
     return HuggingFaceEmbeddings(
         model_name=os.getenv("HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     )

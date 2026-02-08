@@ -1,7 +1,7 @@
 """Safety validation for home repair responses."""
 
 from langchain_core.messages import SystemMessage, HumanMessage
-from src.services.llm_utils import get_llm
+from src.services.llm_utils import invoke_llm
 
 
 def validate_safety(user_query: str, response: str, domain: str) -> dict:
@@ -76,18 +76,15 @@ Response to Validate:
 
 Is this response safe? What warnings should be added?"""
     
-    llm = get_llm(temperature=0.1)  # Low temperature for safety checks
-    
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt)
     ]
     
     try:
-        result = llm.invoke(messages)
+        content = invoke_llm(messages, temperature=0.1).lower()  # Low temperature for safety checks
         
-        # Parse response (simple string parsing since Gemini might not always return perfect JSON)
-        content = result.content.lower()
+        # Parse response (simple string parsing since model might not always return perfect JSON)
         
         warnings = []
         if "requires_professional" in content or "call a professional" in content:
