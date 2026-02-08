@@ -21,9 +21,18 @@ load_dotenv()
 from src.services.chunker import chunk_documents
 from src.services.document_loader import DocumentChunk, load_document
 from src.services.vector_store import add_chunks_to_store, get_vector_store
-from src.agents.coordinator import coordinator_invoke
+from src.agents.coordinator import classify_domain
+from src.agents.specialists.registry import get_specialist_response
 from src.agents.vision_analysis import analyze_image
 from src.evaluation.eval_agent import log_interaction
+
+DOMAIN_META = {
+    "plumbing":   {"emoji": "💧", "color": "#2563EB"},
+    "electrical": {"emoji": "⚡", "color": "#D97706"},
+    "carpentry":  {"emoji": "🔨", "color": "#7C3AED"},
+    "hvac":       {"emoji": "❄️", "color": "#0891B2"},
+    "general":    {"emoji": "🔧", "color": "#6B7280"},
+}
 
 st.set_page_config(
     page_title="FixPalAI - AI Technician Copilot",
@@ -94,6 +103,11 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "user_input" not in st.session_state:
     st.session_state.user_input = ""
+
+# Handle clearing input before widget creation
+if st.session_state.get("should_clear_input"):
+    st.session_state.user_input = ""
+    st.session_state.should_clear_input = False
 
 # ---- Sidebar ----
 with st.sidebar:
@@ -171,7 +185,7 @@ with st.sidebar:
 
     if st.button("🗑️ Clear Chat History", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.user_input = ""
+        st.session_state.should_clear_input = True
         st.rerun()
 
 # ---- Main ----
@@ -182,20 +196,6 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-st.markdown("### 🚀 Quick Start")
-col1, col2, col3, col4 = st.columns(4)
-for col, label, prompt in [
-    (col1, "🔧 Plumbing", "I need help with a plumbing issue"),
-    (col2, "❄️ HVAC", "I need help with an HVAC issue"),
-    (col3, "⚡ Electrical", "I need help with an electrical issue"),
-    (col4, "🔨 General", "I need help with a home repair issue"),
-]:
-    with col:
-        if st.button(label, key=f"quick_{label}", use_container_width=True):
-            st.session_state.user_input = prompt
-            st.rerun()
-
-st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("### 💬 Describe Your Issue")
 
 col_input, col_image = st.columns([2, 1])
@@ -236,37 +236,71 @@ with col_send:
                 st.error(err)
                 st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}", "domain": "error"})
             else:
-                image_context = None
-                if uploaded_image:
-                    data = uploaded_image.read()
-                    try:
-                        image_context = analyze_image(
-                            data,
-                            user_query=f"User asks: {prompt}. Describe what you see for home repair diagnosis.",
+                try:
+                    with st.status("🔧 Working on your repair guide...", expanded=True) as status:
+                        # Step 1: Vision analysis
+                        image_context = None
+                        if uploaded_image:
+                            st.write("📷 Analyzing uploaded image...")
+                            data = uploaded_image.read()
+                            try:
+                                image_context = analyze_image(
+                                    data,
+                                    user_query=f"User asks: {prompt}. Describe what you see for home repair diagnosis.",
+                                )
+                                st.write("✓ Image analyzed")
+                            except Exception as e:
+                                st.write(f"⚠️ Could not analyze image ({e}), continuing without it")
+
+                        # Step 2: Domain classification
+                        st.write("🔍 Classifying issue domain...")
+                        context_for_domain = prompt
+                        if image_context:
+                            context_for_domain += f"\nImage context: {image_context}"
+                        domain = classify_domain(context_for_domain)
+                        dm = DOMAIN_META.get(domain, DOMAIN_META["general"])
+                        st.write(f"✓ Routed to **{dm['emoji']} {domain.title()} Specialist**")
+
+                        # Step 3: RAG + specialist response
+                        st.write("📚 Searching knowledge base and generating response...")
+                        answer, meta = get_specialist_response(
+                            domain=domain,
+                            user_query=prompt,
+                            vector_store=vs,
+                            image_context=image_context,
                         )
-                    except Exception:
-                        pass
-                with st.spinner("Routing and thinking..."):
-                    try:
-                        answer, domain = coordinator_invoke(
-                            prompt, vector_store=vs, image_context=image_context
-                        )
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": answer,
-                            "domain": domain,
-                        })
-                        log_interaction(prompt=prompt, response=answer, domain=domain, image_provided=bool(uploaded_image))
-                    except Exception as e:
-                        err = str(e)
-                        st.error(err)
-                        st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}", "domain": "error"})
-                        log_interaction(prompt=prompt, response=f"Error: {err}", domain="error", image_provided=bool(uploaded_image))
-            st.session_state.user_input = ""
+                        rag_count = meta.get("rag_docs_found", 0)
+                        if rag_count:
+                            st.write(f"✓ Found **{rag_count}** relevant source(s) in knowledge base")
+                        else:
+                            st.write("ℹ️ No matching documents found — using general knowledge")
+
+                        # Step 4: Safety
+                        warnings = meta.get("safety_warnings", [])
+                        if warnings:
+                            st.write(f"⚠️ **{len(warnings)} safety warning(s)** added to response")
+                        else:
+                            st.write("🛡️ Safety check passed")
+
+                        status.update(label="✅ Repair guide ready!", state="complete", expanded=False)
+
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": answer,
+                        "domain": domain,
+                        "meta": meta,
+                    })
+                    log_interaction(prompt=prompt, response=answer, domain=domain, image_provided=bool(uploaded_image))
+                except Exception as e:
+                    err = str(e)
+                    st.error(err)
+                    st.session_state.messages.append({"role": "assistant", "content": f"Error: {err}", "domain": "error", "meta": {}})
+                    log_interaction(prompt=prompt, response=f"Error: {err}", domain="error", image_provided=bool(uploaded_image))
+            st.session_state.should_clear_input = True
             st.rerun()
 with col_clear:
     if st.button("🔄 Clear", use_container_width=True):
-        st.session_state.user_input = ""
+        st.session_state.should_clear_input = True
         st.rerun()
 
 # ---- Display messages ----
@@ -282,17 +316,36 @@ if st.session_state.messages:
                 </div>
             """, unsafe_allow_html=True)
         elif msg["role"] == "assistant":
-            domain = msg.get("domain", "")
+            domain = msg.get("domain", "general")
+            meta = msg.get("meta", {})
             if domain and domain != "error":
-                st.caption(f"Routed to: **{domain.title()}** specialist")
+                dm = DOMAIN_META.get(domain, DOMAIN_META["general"])
+                rag_count = meta.get("rag_docs_found", 0)
+                safety_ok = not meta.get("safety_warnings")
+                safety_label = "🛡️ Safety cleared" if safety_ok else f"⚠️ {len(meta.get('safety_warnings', []))} warning(s)"
+                sources_label = f"📚 {rag_count} source(s)" if rag_count else "📚 General knowledge"
+                st.caption(f"{dm['emoji']} **{domain.title()} Specialist** &nbsp;·&nbsp; {sources_label} &nbsp;·&nbsp; {safety_label}")
             st.markdown(f'<div class="ai-message">', unsafe_allow_html=True)
             st.markdown(msg.get("content") or "")
             st.markdown("</div>", unsafe_allow_html=True)
             if msg.get("content"):
-                if st.button("🔊 Read aloud", key=f"tts_ui_{i}"):
-                    audio_bytes = text_to_speech(msg["content"])
-                    if audio_bytes:
-                        st.session_state[f"tts_audio_ui_{i}"] = audio_bytes
+                col_tts, col_trace = st.columns([1, 3])
+                with col_tts:
+                    if st.button("🔊 Read aloud", key=f"tts_ui_{i}"):
+                        audio_bytes = text_to_speech(msg["content"])
+                        if audio_bytes:
+                            st.session_state[f"tts_audio_ui_{i}"] = audio_bytes
+                if meta:
+                    with col_trace:
+                        with st.expander("🔍 Processing trace"):
+                            st.markdown(f"- **Domain:** {domain.title()}")
+                            st.markdown(f"- **Sources retrieved:** {meta.get('rag_docs_found', 0)}")
+                            warnings = meta.get("safety_warnings", [])
+                            if warnings:
+                                for w in warnings:
+                                    st.markdown(f"- ⚠️ {w}")
+                            else:
+                                st.markdown("- 🛡️ No safety warnings")
                 if f"tts_audio_ui_{i}" in st.session_state:
                     b64 = base64.b64encode(st.session_state[f"tts_audio_ui_{i}"]).decode("utf-8")
                     st.markdown(

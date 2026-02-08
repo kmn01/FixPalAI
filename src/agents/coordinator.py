@@ -14,32 +14,26 @@ def coordinator_invoke(
 ) -> tuple[str, str]:
     """
     Coordinate the query: classify domain, route to specialist.
-    
+
     Returns:
         (answer, domain)
     """
-    # Build context
     context_parts = [f"User query: {user_query}"]
     if image_context:
         context_parts.append(f"Image analysis: {image_context}")
-    
+
     full_context = "\n".join(context_parts)
-    
-    # Step 1: Classify domain
-    domain = _classify_domain(full_context)
-    
-    # Step 2: Route to specialist
-    answer = get_specialist_response(
+    domain = classify_domain(full_context)
+    answer, _ = get_specialist_response(
         domain=domain,
         user_query=user_query,
         vector_store=vector_store,
         image_context=image_context,
     )
-    
     return answer, domain
 
 
-def _classify_domain(query: str) -> str:
+def classify_domain(query: str) -> str:
     """Classify the query into a domain: plumbing, electrical, carpentry, hvac, or general."""
     
     system_prompt = """You are a domain classifier for home repair queries.

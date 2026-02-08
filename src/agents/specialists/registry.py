@@ -39,21 +39,16 @@ def get_specialist_response(
     user_query: str,
     vector_store: VectorStore | None = None,
     image_context: str | None = None,
-) -> str:
+) -> tuple[str, dict]:
     """
     Get response from domain specialist using RAG.
-    
-    Args:
-        domain: plumbing, electrical, carpentry, hvac, or general
-        user_query: User's question
-        vector_store: Vector store for RAG
-        image_context: Optional image analysis context
-    
+
     Returns:
-        Specialist's response with safety validation
+        (answer, meta) where meta contains rag_docs_found, safety_warnings, is_safe
     """
     # Get RAG context
     rag_context = ""
+    rag_docs_found = 0
     if vector_store:
         try:
             docs = search_multiple_namespaces(
@@ -63,13 +58,14 @@ def get_specialist_response(
                 filter_domain=domain if domain != "general" else None
             )
             if docs:
+                rag_docs_found = len(docs)
                 rag_context = "\n\n".join([
                     f"[Source: {doc.metadata.get('source', 'unknown')}]\n{doc.page_content}"
                     for doc in docs
                 ])
         except Exception:
             rag_context = ""
-    
+
     # Build context
     context_parts = []
     if rag_context:
@@ -77,13 +73,12 @@ def get_specialist_response(
     if image_context:
         context_parts.append(f"**Visual Analysis:**\n{image_context}")
     context_parts.append(f"**User Question:**\n{user_query}")
-    
+
     full_context = "\n\n".join(context_parts)
-    
+
     # Get specialist system prompt
     system_prompt = SPECIALIST_PROMPTS.get(domain, SPECIALIST_PROMPTS["general"])
-    
-    # Add RAG instruction
+
     system_prompt += """
 
 When knowledge base context is provided, use it to give accurate, specific answers.
@@ -98,20 +93,23 @@ Provide your response in this format:
 6. **Additional Tips**: Best practices and preventive measures
 
 Be concise but thorough. Prioritize safety above all else."""
-    
-    # Get LLM and generate response (Dedalus if USE_DEDALUS set, else Gemini)
+
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=full_context)
     ]
     answer = invoke_llm(messages, temperature=0.7)
-    
+
     # Safety validation
     safety_check = validate_safety(user_query, answer, domain)
-    
+
     if not safety_check["is_safe"]:
-        # Prepend safety warnings
         warnings = "\n".join([f"⚠️ {w}" for w in safety_check["warnings"]])
         answer = f"**SAFETY WARNINGS:**\n{warnings}\n\n{answer}"
-    
-    return answer
+
+    meta = {
+        "rag_docs_found": rag_docs_found,
+        "safety_warnings": safety_check.get("warnings", []),
+        "is_safe": safety_check["is_safe"],
+    }
+    return answer, meta
