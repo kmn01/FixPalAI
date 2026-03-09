@@ -1,10 +1,17 @@
-"""Coordinator agent - routes queries to specialist agents."""
+"""Coordinator - routes queries to specialists, with optional Dedalus support."""
 
-from langchain_core.messages import SystemMessage, HumanMessage
+import os
 from langchain_core.vectorstores import VectorStore
 
-from src.services.llm_utils import invoke_llm
-from src.agents.specialists.registry import get_specialist_response
+
+def classify_domain(query: str) -> str:
+    """Classify query into domain, with optional Dedalus support."""
+    use_dedalus = os.getenv("USE_DEDALUS", "false").lower() == "true"
+    
+    if use_dedalus:
+        return _classify_with_dedalus(query)
+    else:
+        return _classify_with_gemini(query)
 
 
 def coordinator_invoke(
@@ -13,49 +20,89 @@ def coordinator_invoke(
     image_context: str | None = None,
 ) -> tuple[str, str]:
     """
-    Coordinate the query: classify domain, route to specialist.
-
-    Returns:
-        (answer, domain)
+    Main coordinator function: classify domain and route to specialist.
+    Returns: (answer, domain)
     """
-    context_parts = [f"User query: {user_query}"]
+    from src.agents.specialists.registry import get_specialist_response
+    
+    # Build context for classification
+    context = user_query
     if image_context:
-        context_parts.append(f"Image analysis: {image_context}")
-
-    full_context = "\n".join(context_parts)
-    domain = classify_domain(full_context)
-    answer, _ = get_specialist_response(
+        context += f"\nImage context: {image_context}"
+    
+    # Classify domain
+    domain = classify_domain(context)
+    
+    # Get specialist response
+    answer = get_specialist_response(
         domain=domain,
         user_query=user_query,
         vector_store=vector_store,
         image_context=image_context,
     )
+    
     return answer, domain
 
 
-def classify_domain(query: str) -> str:
-    """Classify the query into a domain: plumbing, electrical, carpentry, hvac, or general."""
-    
-    system_prompt = """You are a domain classifier for home repair queries.
-Analyze the query and classify it into ONE of these domains:
+def _classify_with_dedalus(query: str) -> str:
+    """Use Dedalus for classification."""
+    try:
+        from src.services.dedalus_wrapper import get_dedalus_agent
+        
+        prompt = f"""Classify this home repair query into ONE domain:
 - plumbing: pipes, leaks, faucets, drains, toilets, water heaters
 - electrical: wiring, outlets, switches, circuit breakers, lighting
-- carpentry: wood, doors, windows, cabinets, framing, flooring
-- hvac: heating, cooling, air conditioning, furnace, thermostat, ventilation
-- general: multi-domain, unclear, or general home maintenance
+- carpentry: wood, doors, windows, cabinets, framing
+- hvac: heating, cooling, air conditioning, furnace, thermostat
+- general: unclear or multi-domain
 
-Respond with ONLY the domain name, nothing else."""
+Respond with ONLY the domain name.
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query)
-    ]
-    response_text = invoke_llm(messages, temperature=0.1)  # Low temp for classification
-    domain = response_text.strip().lower()
-    
-    # Validate domain
-    valid_domains = ["plumbing", "electrical", "carpentry", "hvac", "general"]
-    if domain not in valid_domains:
-        domain = "general"
-    
-    return domain
+Query: {query}"""
+        
+        agent = get_dedalus_agent()
+        domain = agent.run(prompt).strip().lower()
+        
+        valid = ["plumbing", "electrical", "carpentry", "hvac", "general"]
+        return domain if domain in valid else "general"
+    except Exception as e:
+        print(f"Dedalus classification failed: {e}, using fallback")
+        return _keyword_route(query)
+
+
+def _classify_with_gemini(query: str) -> str:
+    """Use Gemini for classification (fallback)."""
+    try:
+        from langchain_core.messages import HumanMessage
+        from src.services.llm_utils import get_llm
+        
+        prompt = f"""Classify this query into ONE domain:
+plumbing, electrical, carpentry, hvac, or general
+
+Query: {query}
+
+Respond with only the domain name."""
+        
+        llm = get_llm(temperature=0.1)
+        response = llm.invoke([HumanMessage(content=prompt)])
+        domain = response.content.strip().lower()
+        
+        valid = ["plumbing", "electrical", "carpentry", "hvac", "general"]
+        return domain if domain in valid else "general"
+    except Exception as e:
+        print(f"Gemini classification failed: {e}, using keyword fallback")
+        return _keyword_route(query)
+
+
+def _keyword_route(query: str) -> str:
+    """Keyword-based fallback routing."""
+    q = query.lower()
+    if any(w in q for w in ["pipe", "drain", "faucet", "toilet", "leak", "water", "plumb"]):
+        return "plumbing"
+    if any(w in q for w in ["wire", "outlet", "switch", "circuit", "breaker", "electric", "light"]):
+        return "electrical"
+    if any(w in q for w in ["door", "cabinet", "trim", "floor", "wood", "carpent"]):
+        return "carpentry"
+    if any(w in q for w in ["furnace", "ac", "thermostat", "hvac", "heat", "cool"]):
+        return "hvac"
+    return "general"

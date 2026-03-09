@@ -40,6 +40,7 @@ def get_dedalus_llm(prompt: str, temperature: float = 0.7):
         response = await runner.run(
             input=prompt,
             model=os.getenv("DEDALUS_MODEL"),
+            stream=True
         )
         return response.final_output or ""
 
@@ -72,7 +73,7 @@ def invoke_llm(
     Uses Dedalus if USE_DEDALUS is set and dedalus_labs is installed; otherwise Gemini.
     Returns the model output as a string. Gemini code path is unchanged when not using Dedalus.
     """
-    if os.getenv("USE_DEDALUS") and os.getenv("DEDALUS_API_KEY") and os.getenv("DEDALUS_MODEL"):
+    if os.getenv("USE_DEDALUS", "").strip() in ("1", "true", "True", "yes") and os.getenv("DEDALUS_API_KEY") and os.getenv("DEDALUS_MODEL"):
         try:
             prompt = _messages_to_prompt(messages)
             return get_dedalus_llm(prompt, temperature=temperature)

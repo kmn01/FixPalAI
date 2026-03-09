@@ -62,7 +62,7 @@ st.markdown("""
     .quick-card:hover { border-color: #4F46E5; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2); }
     .user-message { background: #EEF2FF; border-left: 4px solid #4F46E5; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
     .ai-message { background: #F0FDF4; border-left: 4px solid #10B981; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
-    .sidebar-section { background: #F9FAFB; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .sidebar-section { background: #F9FAFB; border-radius: 8px; padding: 0.1rem; margin-bottom: 0.5rem; }
     .sidebar-section h3 { font-size: 0.9rem; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
     .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.875rem; font-weight: 600; }
     .status-connected { background: #D1FAE5; color: #065F46; }
@@ -200,14 +200,6 @@ if st.session_state.get("should_clear_input"):
 
 # ---- Sidebar ----
 with st.sidebar:
-    st.markdown("""
-        <div class="main-header" style="padding: 1.5rem; margin-bottom: 1.5rem;">
-            <h1 style="font-size: 1.5rem;">🔧 FixPalAI</h1>
-            <p style="font-size: 0.9rem;">AI Technician Copilot</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.markdown("### 📚 Knowledge Base")
     if st.session_state.get("vector_store") is not None:
         st.markdown('<span class="status-badge status-connected">✓ Connected</span>', unsafe_allow_html=True)
@@ -280,7 +272,7 @@ with st.sidebar:
 # ---- Main ----
 st.markdown("""
     <div class="main-header">
-        <h1>👋 Welcome to FixPalAI</h1>
+        <h1>👋 Welcome to 🔧FixPalAI</h1>
         <p>Get instant repair guidance — ingest documents in the sidebar, then describe your issue below.</p>
     </div>
 """, unsafe_allow_html=True)
@@ -306,7 +298,7 @@ with col_image:
     if uploaded_image:
         st.image(uploaded_image, caption="Uploaded", use_container_width=True)
 
-col_send, _, col_clear = st.columns([2, 1, 1])
+col_send, col_clear = st.columns([2, 1])
 with col_send:
     if st.button("🚀 Get Repair Guide", type="primary", use_container_width=True):
         prompt = (user_input or "").strip()
@@ -414,7 +406,7 @@ if st.session_state.messages:
                 safety_label = "🛡️ Safety cleared" if safety_ok else f"⚠️ {len(meta.get('safety_warnings', []))} warning(s)"
                 sources_label = f"📚 {rag_count} source(s)" if rag_count else "📚 General knowledge"
                 st.caption(f"{dm['emoji']} **{domain.title()} Specialist** &nbsp;·&nbsp; {sources_label} &nbsp;·&nbsp; {safety_label}")
-            st.markdown(f'<div class="ai-message">', unsafe_allow_html=True)
+            st.markdown(f'<div class="ai-message"><strong>🔧 FixPalAI:</strong></div>', unsafe_allow_html=True)            
             st.markdown(msg.get("content") or "")
             st.markdown("</div>", unsafe_allow_html=True)
             if msg.get("content"):
@@ -443,13 +435,4 @@ if st.session_state.messages:
                     )
 else:
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.info("👆 Describe your issue above or pick a category, then click **Get Repair Guide**.")
-    st.markdown("#### 💡 Example queries")
-    for ex in [
-        "My water heater is leaking from the bottom",
-        "HVAC unit won't turn on and thermostat shows error E3",
-        "Circuit breaker keeps tripping when I use the microwave",
-    ]:
-        if st.button(f"💬 {ex}", key=ex):
-            st.session_state.user_input = ex
-            st.rerun()
+    st.info("👆 Describe your issue above then click **Get Repair Guide**.")
