@@ -13,6 +13,5 @@ React reference UI for FixPalAI. This is a **standalone prototype** and is not w
 The integrated UI lives in the Streamlit app:
 
 - **Default**: `streamlit run app/main.py`
-- **Improved UI** (same backend, different layout): `streamlit run app/fixpal_ui_improved.py`
 
 Both use the same backend: coordinator, RAG, vector store, ingestion, and TTS.

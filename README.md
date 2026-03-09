@@ -71,7 +71,7 @@ An intelligent multi-agent AI system that provides home repair diagnosis and gui
 ### Running the App
 
 ```bash
-streamlit run app/fixpal_ui_improved.py
+streamlit run app/main.py
 ```
 
 Opens at `http://localhost:8501`
