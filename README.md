@@ -88,8 +88,7 @@ python -m src.ingestion.manuals data/manuals --namespace manuals
 ```
 FixPalAI/
 ├── app/
-│   ├── main.py                   # Basic Streamlit UI
-│   └── fixpal_ui_improved.py     # Enhanced Streamlit UI
+│   └── main.py     # Enhanced Streamlit UI
 ├── src/
 │   ├── agents/
 │   │   ├── coordinator.py        # Routes queries to domain specialists
