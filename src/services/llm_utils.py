@@ -40,7 +40,7 @@ def get_dedalus_llm(prompt: str, temperature: float = 0.7):
         response = await runner.run(
             input=prompt,
             model=os.getenv("DEDALUS_MODEL"),
-            stream=True
+            max_tokens=4096,
         )
         return response.final_output or ""
 

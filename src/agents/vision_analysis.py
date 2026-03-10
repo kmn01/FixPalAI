@@ -54,14 +54,9 @@ def analyze_image(image_bytes: bytes, user_query: str = "") -> str:
             response = await client.chat.completions.create(
                 model=os.getenv("DEDALUS_MODEL"),
                 messages=messages,
-                stream=True,
+                max_tokens=4096,
             )
-            full_text = ""
-            async for chunk in response:
-                delta = chunk.choices[0].delta
-                if hasattr(delta, "content") and delta.content:
-                    full_text += delta.content
-            return full_text
+            return response.choices[0].message.content or ""
 
         return asyncio.run(_run())
 
