@@ -6,16 +6,16 @@ An intelligent multi-agent AI system that provides home repair diagnosis and ste
 
 - **Multi-Domain Specialists** — Dedicated agents for plumbing, electrical, carpentry, HVAC, and general repairs
 - **RAG-Powered Answers** — Grounds responses in your uploaded repair manuals and documentation
-- **Vision Analysis** — Analyzes uploaded photos to identify repair issues using Gemini via Dedalus
+- **Vision Analysis** — Analyzes uploaded photos to identify repair issues
 - **Safety Validation** — Built-in checks that flag dangerous operations before they're recommended
-- **Text-to-Speech** — Hands-free response playback so you can follow along during repairs
+- **Text-to-Speech** — Hands-free response playback the user can follow along during repairs
 - **Evaluation Logging** — Tracks all interactions in SQLite for quality analysis
 
 ## Tech Stack
 
 | Category | Technologies |
 |---|---|
-| LLM & AI | Google Gemini 2.5-flash, Dedalus Labs, LangChain, LangGraph |
+| LLM & AI | Google Gemini 2.5-flash, Dedalus Labs, LangChain |
 | Embeddings | Google Gemini, Sentence-Transformers (HuggingFace) |
 | Vector DB | ChromaDB |
 | UI | Streamlit |
@@ -78,6 +78,7 @@ FixPalAI/
 ### Prerequisites
 
 - Python 3.10+
+- Dedalus API Key
 - Google Gemini API key
 
 ### Installation
@@ -140,7 +141,7 @@ You can also upload files directly from the sidebar in the UI.
 | Variable | Default | Description |
 |---|---|---|
 | `GOOGLE_API_KEY` | required | Google Gemini API key |
-| `DEDALUS_API_KEY` | — | Dedalus Labs API key (for vision) |
+| `DEDALUS_API_KEY` | — | Dedalus Labs API key |
 | `USE_DEDALUS` | `0` | Set to `1` to enable Dedalus vision |
 | `VECTOR_DB` | `chroma` | Vector store: `chroma` |
 | `LLM_MODEL` | `gemini-2.5-flash` | LLM model identifier |
